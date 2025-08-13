@@ -1,45 +1,52 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>密码保护页面</title>
-  <script>
-    // 设置密码哈希
-    window.__ENV__ = {
-      PASSWORD: "69fb2ee18ab9ebb22521c2675d1e3df2eb603a09348dc1406cb580b1edbbf4b5"
-    };
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const cookie = request.headers.get("Cookie") || "";
 
-    // 计算 SHA-256
-    async function sha256(message) {
-      const msgBuffer = new TextEncoder().encode(message);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // 已经通过验证
+    if (cookie.includes("auth_pass=true")) {
+      return fetch(request);
     }
 
-    // 验证密码
-    async function verifyPassword() {
-      const pwd = prompt("请输入访问密码：");
-      if (!pwd) {
-        document.body.innerHTML = "<h1>拒绝访问</h1>";
-        return;
-      }
-      const hash = await sha256(pwd);
-      if (hash === window.__ENV__.PASSWORD) {
-        // 密码正确才插入内容
-        document.body.innerHTML = `
-          <h1>这是内容区</h1>
-          <p>只有输入正确密码才能看到的内容。</p>
-        `;
+    // 检查是否是表单提交
+    if (request.method === "POST") {
+      const formData = await request.formData();
+      const password = formData.get("password");
+
+      // 从环境变量读取密码
+      const correctPassword = env.PASSWORD; 
+
+      if (password === correctPassword) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Set-Cookie": "auth_pass=true; Path=/; HttpOnly; Max-Age=3600",
+            "Location": url.pathname,
+          },
+        });
       } else {
-        document.body.innerHTML = "<h1>密码错误</h1>";
+        return new Response("密码错误", { status: 401 });
       }
     }
 
-    window.onload = verifyPassword;
-  </script>
-</head>
-<body>
-  <!-- 页面初始为空，等待密码验证 -->
-</body>
-</html>
+    // 返回密码输入页面
+    return new Response(`
+      <html>
+        <head>
+          <title>请输入密码</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding-top: 100px; }
+            input { padding: 10px; font-size: 16px; }
+            button { padding: 10px 20px; font-size: 16px; }
+          </style>
+        </head>
+        <body>
+          <form method="POST">
+            <input type="password" name="password" placeholder="输入密码" required />
+            <button type="submit">进入</button>
+          </form>
+        </body>
+      </html>
+    `, { headers: { "Content-Type": "text/html" } });
+  }
+}
